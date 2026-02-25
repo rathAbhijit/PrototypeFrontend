@@ -1,59 +1,70 @@
-import { useState } from "react";
-
 export default function FileSidebar({
   files,
   activeFile,
   onSelectFile,
-  onCreateFile
+  onCreateFile,
 }) {
-  const [newFileName, setNewFileName] = useState("");
-
   const handleCreate = () => {
-    if (!newFileName.trim()) return;
-
-    onCreateFile(newFileName.trim());
-    setNewFileName("");
+    const name = prompt("Enter file name:");
+    if (name) {
+      onCreateFile(name);
+    }
   };
 
   return (
-    <div style={{
-      width: "200px",
-      background: "#1e1e1e",
-      color: "white",
-      padding: "10px",
-      borderRight: "1px solid #333"
-    }}>
-      <h4>Files</h4>
-
-      {files.map((file) => (
-        <div
-          key={file}
-          onClick={() => onSelectFile(file)}
-          style={{
-            padding: "5px",
-            cursor: "pointer",
-            background: file === activeFile ? "#333" : "transparent"
-          }}
-        >
-          {file}
-        </div>
-      ))}
-
-      <div style={{ marginTop: "10px" }}>
-        <input
-          placeholder="create file"
-          value={newFileName}
-          onChange={(e) => setNewFileName(e.target.value)}
-          style={{ width: "100%", padding: "4px" }}
-        />
-
-        <button
-          onClick={handleCreate}
-          style={{ width: "100%", marginTop: "5px" }}
-        >
-          Create
-        </button>
+    <div
+      style={{
+        width: "240px",
+        background: "#1e1e1e",
+        color: "#ccc",
+        display: "flex",
+        flexDirection: "column",
+        borderRight: "1px solid #2a2a2a",
+      }}
+    >
+      <div
+        style={{
+          padding: "12px",
+          fontWeight: "bold",
+          borderBottom: "1px solid #2a2a2a",
+        }}
+      >
+        Explorer
       </div>
+
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        {files.map((file) => (
+          <div
+            key={file}
+            onClick={() => onSelectFile(file)}
+            style={{
+              padding: "8px 12px",
+              cursor: "pointer",
+              background:
+                file === activeFile ? "#2d2d2d" : "transparent",
+              borderLeft:
+                file === activeFile
+                  ? "3px solid #4CAF50"
+                  : "3px solid transparent",
+            }}
+          >
+            📄 {file}
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={handleCreate}
+        style={{
+          padding: "10px",
+          background: "#2a2a2a",
+          color: "white",
+          border: "none",
+          cursor: "pointer",
+        }}
+      >
+        + New File
+      </button>
     </div>
   );
 }

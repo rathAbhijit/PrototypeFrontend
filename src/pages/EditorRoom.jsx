@@ -98,7 +98,15 @@ export default function EditorRoom() {
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div
+      style={{
+        display: "flex",
+        height: "100vh",
+        background: "#181818",
+        color: "#eee",
+        fontFamily: "Inter, system-ui, sans-serif"
+      }}
+    >
       <FileSidebar
         files={files}
         activeFile={activeFile}
@@ -106,38 +114,50 @@ export default function EditorRoom() {
         onCreateFile={handleFileCreate}
       />
 
-      <div style={{ flex: 1 }}>
-        <div style={{
-          padding: "10px",
-          background: "#1e1e1e",
-          color: "white",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center"
-        }}>
-          <div>
-            <strong>Room:</strong> {roomId} | <strong>Users:</strong> {users}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        {/* HEADER */}
+        <div
+          style={{
+            padding: "14px 20px",
+            background: "#111",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            borderBottom: "1px solid #2a2a2a",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.4)"
+          }}
+        >
+          <div style={{ fontSize: "14px", opacity: 0.9 }}>
+            <strong>Room:</strong> {roomId}
+            <span style={{ marginLeft: "20px" }}>
+              👥 {users} active
+            </span>
           </div>
 
           <button
             onClick={handleCopyLink}
             style={{
-              padding: "6px 12px",
+              padding: "6px 14px",
               cursor: "pointer",
-              background: copied ? "#28a745" : "#333",
+              background: copied ? "#4CAF50" : "#222",
               color: "white",
-              border: "none",
-              borderRadius: "4px"
+              border: "1px solid #444",
+              borderRadius: "6px",
+              transition: "all 0.2s ease",
+              fontSize: "13px"
             }}
           >
-            {copied ? "Copied!" : "Copy Link"}
+            {copied ? "✓ Copied" : "Copy Link"}
           </button>
         </div>
 
-        <CodeEditor
-          code={code}
-          onChange={handleChange}
-        />
+        {/* EDITOR AREA */}
+        <div style={{ flex: 1 }}>
+          <CodeEditor
+            code={code}
+            onChange={handleChange}
+          />
+        </div>
       </div>
     </div>
   );

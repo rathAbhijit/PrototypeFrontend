@@ -1,164 +1,268 @@
-import { useEffect, useState, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import debounce from "lodash.debounce";
+import { useState, useEffect, useRef } from "react";
+import { useParams } from "react-router-dom";
 import CodeEditor from "../components/CodeEditor";
 import FileSidebar from "../components/FileSidebar";
-import {
-  connectToRoom,
-  sendCodeUpdate,
-  createFile,
-  openFile,
-  getClientId
-} from "../services/websocket";
 
 export default function EditorRoom() {
+
   const { roomId } = useParams();
-  const navigate = useNavigate();
 
-  const [files, setFiles] = useState([]);
-  const [activeFile, setActiveFile] = useState(null);
-  const [code, setCode] = useState("");
-  const [users, setUsers] = useState(1);
-  const [copied, setCopied] = useState(false);
+  const [tree, setTree] = useState([]);
+  const [activeNode, setActiveNode] = useState(null);
 
-  const myId = getClientId();
-  const activeFileRef = useRef(null);
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
 
-  const debouncedSend = useRef(
-    debounce((filename, value) => {
-      sendCodeUpdate(filename, value);
-    }, 150)
-  ).current;
+  const resizing = useRef(false);
+
+  const API_BASE =
+    window.location.hostname === "localhost"
+      ? "http://127.0.0.1:8000"
+      : "https://prototype-e9pu.onrender.com";
+
+
+  const loadTree = async () => {
+
+    const res = await fetch(`${API_BASE}/api/rooms/${roomId}/tree/`);
+    const data = await res.json();
+
+    if (data.length === 0) {
+
+      await fetch(`${API_BASE}/api/rooms/${roomId}/create-node/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name: "main.py",
+          type: "file",
+          parent: null
+        })
+      });
+
+      const res2 = await fetch(`${API_BASE}/api/rooms/${roomId}/tree/`);
+      const newTree = await res2.json();
+
+      setTree(newTree);
+      setActiveNode(newTree[0]);
+
+    } else {
+
+      setTree(data);
+
+      if (!activeNode && data.length > 0) {
+        setActiveNode(data[0]);
+      }
+
+    }
+
+  };
+
 
   useEffect(() => {
-    if (!roomId) {
-      navigate("/");
-      return;
-    }
+    loadTree();
+  }, []);
 
-    connectToRoom(roomId, (data) => {
 
-      if (data.type === "file_list_update") {
-        setFiles(data.files);
+  const createNode = async (parent, type) => {
 
-        if (!activeFileRef.current && data.files.length > 0) {
-          const firstFile = data.files[0];
-          setActiveFile(firstFile);
-          activeFileRef.current = firstFile;
-          openFile(firstFile);
-        }
-      }
+    const name = prompt(`Enter ${type} name`);
 
-      if (data.type === "code_update") {
-        if (data.sender === myId) return;
+    if (!name) return;
 
-        const filename = data.payload.filename;
-
-        if (filename === activeFileRef.current) {
-          setCode(data.payload.code);
-        }
-      }
-
-      if (data.type === "presence_update") {
-        setUsers(data.count);
-      }
+    await fetch(`${API_BASE}/api/rooms/${roomId}/create-node/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name,
+        type,
+        parent
+      })
     });
 
+    loadTree();
+  };
+
+
+  const renameNode = async (nodeId, name) => {
+
+    await fetch(`${API_BASE}/api/rooms/rename/${nodeId}/`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ name })
+    });
+
+    loadTree();
+
+  };
+
+
+  const deleteNode = async (nodeId) => {
+
+    if (!window.confirm("Delete item?")) return;
+
+    await fetch(`${API_BASE}/api/rooms/delete/${nodeId}/`, {
+      method: "DELETE"
+    });
+
+    loadTree();
+
+  };
+
+
+  const selectNode = (node) => {
+
+    if (node.type !== "file") return;
+
+    setActiveNode(node);
+
+  };
+
+
+  const startResize = () => {
+    resizing.current = true;
+  };
+
+
+  const stopResize = () => {
+    resizing.current = false;
+  };
+
+
+  const resize = (e) => {
+
+    if (!resizing.current) return;
+
+    setSidebarWidth(Math.max(180, e.clientX));
+
+  };
+
+
+  useEffect(() => {
+
+    window.addEventListener("mousemove", resize);
+    window.addEventListener("mouseup", stopResize);
+
     return () => {
-      debouncedSend.cancel();
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResize);
     };
-  }, [roomId]);
 
-  const handleChange = (newCode) => {
-    setCode(newCode);
+  }, []);
 
-    if (activeFileRef.current) {
-      debouncedSend(activeFileRef.current, newCode);
-    }
-  };
-
-  const handleFileSelect = (file) => {
-    setActiveFile(file);
-    activeFileRef.current = file;
-    openFile(file);
-  };
-
-  const handleFileCreate = (filename) => {
-    createFile(filename);
-    setActiveFile(filename);
-    activeFileRef.current = filename;
-    openFile(filename);
-  };
-
-  const handleCopyLink = async () => {
-    const link = window.location.href;
-    await navigator.clipboard.writeText(link);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
 
   return (
+
     <div
       style={{
         display: "flex",
+        flexDirection: "column",
         height: "100vh",
         background: "#181818",
-        color: "#eee",
-        fontFamily: "Inter, system-ui, sans-serif"
+        color: "#eee"
       }}
     >
-      <FileSidebar
-        files={files}
-        activeFile={activeFile}
-        onSelectFile={handleFileSelect}
-        onCreateFile={handleFileCreate}
-      />
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        {/* HEADER */}
-        <div
-          style={{
-            padding: "14px 20px",
-            background: "#111",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            borderBottom: "1px solid #2a2a2a",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.4)"
-          }}
+      {/* HEADER */}
+      <div
+        style={{
+          height: "42px",
+          background: "#202020",
+          borderBottom: "1px solid #2b2b2b",
+          display: "flex",
+          alignItems: "center",
+          padding: "0 12px",
+          gap: "10px"
+        }}
+      >
+
+        <button
+          onClick={() => setSidebarVisible(!sidebarVisible)}
+          style={headerBtn}
         >
-          <div style={{ fontSize: "14px", opacity: 0.9 }}>
-            <strong>Room:</strong> {roomId}
-            <span style={{ marginLeft: "20px" }}>
-              👥 {users} active
-            </span>
-          </div>
+          ☰
+        </button>
 
-          <button
-            onClick={handleCopyLink}
+        <span style={{ fontWeight: "bold" }}>
+          Collaborative Editor
+        </span>
+
+        <span style={{ opacity: 0.6 }}>
+          Room: {roomId}
+        </span>
+
+      </div>
+
+
+      {/* WORKSPACE */}
+      <div
+        style={{
+          display: "flex",
+          flex: 1,
+          overflow: "hidden"
+        }}
+      >
+
+        {/* SIDEBAR */}
+        {sidebarVisible && (
+          <div
             style={{
-              padding: "6px 14px",
-              cursor: "pointer",
-              background: copied ? "#4CAF50" : "#222",
-              color: "white",
-              border: "1px solid #444",
-              borderRadius: "6px",
-              transition: "all 0.2s ease",
-              fontSize: "13px"
+              width: sidebarWidth,
+              display: "flex"
             }}
           >
-            {copied ? "✓ Copied" : "Copy Link"}
-          </button>
+
+            <FileSidebar
+              tree={tree}
+              onCreate={createNode}
+              onRename={renameNode}
+              onDelete={deleteNode}
+              onSelect={selectNode}
+            />
+
+            {/* RESIZER */}
+            <div
+              onMouseDown={startResize}
+              style={{
+                width: "4px",
+                cursor: "col-resize",
+                background: "#222"
+              }}
+            />
+
+          </div>
+        )}
+
+
+        {/* EDITOR */}
+        <div style={{ flex: 1 }}>
+
+          {activeNode && (
+            <CodeEditor
+              roomId={`${roomId}-${activeNode.id}`}
+            />
+          )}
+
         </div>
 
-        {/* EDITOR AREA */}
-        <div style={{ flex: 1 }}>
-          <CodeEditor
-            code={code}
-            onChange={handleChange}
-          />
-        </div>
       </div>
+
     </div>
+
   );
+
 }
+
+
+const headerBtn = {
+  background: "#2a2a2a",
+  border: "1px solid #333",
+  color: "white",
+  padding: "4px 8px",
+  cursor: "pointer",
+  borderRadius: "4px"
+};

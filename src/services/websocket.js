@@ -10,8 +10,8 @@ const getWebSocketBase = () => {
     return "ws://127.0.0.1:8000";
   }
 
-  // 🔥 Your Render backend
-  return "wss://prototype-e9pu.onrender.com";
+  // 🔥 You 
+  return "wss://prototype-nmqf.onrender.com";
 };
 
 export const connectToRoom = (roomId, onMessage) => {

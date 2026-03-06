@@ -1,167 +1,264 @@
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
+import { themes } from "../styles/theme";
 
 export default function TreeNode({
   node,
-  level,
+  activeNode,
+  onSelect,
   onCreate,
   onRename,
   onDelete,
-  onSelect
+  theme
 }) {
-  const [open, setOpen] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(node.name);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [hover, setHover] = useState(false);
 
-  const padding = level * 14;
+  const [expanded,setExpanded] = useState(true);
+  const [creating,setCreating] = useState(null);
+  const [name,setName] = useState("");
 
-  // auto close menu after 3 seconds
-  useEffect(() => {
-    if (!menuOpen) return;
+  const [menu,setMenu] = useState(false);
+  const timer = useRef(null);
 
-    const timer = setTimeout(() => {
-      setMenuOpen(false);
-    }, 3000);
+  const t = themes[theme];
 
-    return () => clearTimeout(timer);
-  }, [menuOpen]);
+  const submitCreate = () => {
+
+    if(!name.trim()){
+      setCreating(null);
+      return;
+    }
+
+    onCreate(node.id,creating,name.trim());
+
+    setCreating(null);
+    setName("");
+
+  };
+
+
+  const toggleMenu = () => {
+
+    setMenu(prev => !prev);
+
+    clearTimeout(timer.current);
+
+    timer.current = setTimeout(()=>{
+      setMenu(false);
+    },5000);
+
+  };
+
 
   return (
-    <div
-      style={{ paddingLeft: padding, position: "relative" }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => {
-        setHover(false);
-        setMenuOpen(false);
-      }}
-    >
+
+    <div style={{position:"relative"}}>
+
+      {/* NODE ROW */}
+
       <div
+        onMouseEnter={(e)=>{
+          if(activeNode?.id !== node.id)
+            e.currentTarget.style.background = t.colors.hover;
+        }}
+
+        onMouseLeave={(e)=>{
+          if(activeNode?.id !== node.id)
+            e.currentTarget.style.background = "transparent";
+        }}
+
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          cursor: "pointer",
-          padding: "2px 4px"
+          padding:"6px",
+          cursor:"pointer",
+          display:"flex",
+          justifyContent:"space-between",
+          alignItems:"center",
+          color: t.colors.text,
+          background:
+            activeNode?.id === node.id
+              ? t.colors.activeTab
+              : "transparent",
+          fontFamily: t.fonts.ui,
+          fontSize:"13px"
         }}
       >
-        <div
-          onClick={() =>
-            node.type === "folder"
-              ? setOpen(!open)
-              : onSelect(node)
-          }
-        >
-          {node.type === "folder"
-            ? open ? "📂" : "📁"
-            : "📄"}
 
-          {editing ? (
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onBlur={() => {
-                setEditing(false);
-                onRename(node.id, name);
+        <span style={{display:"flex",alignItems:"center",gap:"6px"}}>
+
+          <span onClick={()=>onSelect(node)}>
+            {node.type==="folder"?"📁":"📄"} {node.name}
+          </span>
+
+
+          {node.type === "folder" && (
+
+            <span
+              onClick={(e)=>{
+                e.stopPropagation();
+                setExpanded(!expanded);
               }}
-              style={{
-                marginLeft: 6,
-                background: "#222",
-                color: "white",
-                border: "1px solid #444"
-              }}
-            />
-          ) : (
-            <span style={{ marginLeft: 6 }}>
-              {node.name}
+              style={{width:"14px"}}
+            >
+              {node.children?.length
+                ? (expanded ? "▼":"▶")
+                : ""
+              }
             </span>
-          )}
-        </div>
 
-        {/* 3-dot button appears only on hover */}
-        {hover && (
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            style={{
-              background: "#111",
-              border: "none",
-              color: "#888",
-              cursor: "pointer",
-              fontSize: "16px"
-            }}
-          >
-            ⋯
-          </button>
-        )}
+          )}
+
+        </span>
+
+
+
+        {/* MENU BUTTON */}
+
+        <span
+          onClick={(e)=>{
+            e.stopPropagation();
+            toggleMenu();
+          }}
+          style={{opacity:0.6}}
+        >
+          ⋮
+        </span>
+
       </div>
 
-      {menuOpen && (
+
+
+      {/* CONTEXT MENU */}
+
+      {menu && (
+
         <div
           style={{
-            position: "absolute",
-            right: 0,
-            top: 22,
-            background: "#1c1c1c",
-            border: "1px solid #333",
-            borderRadius: "4px",
-            padding: "6px",
-            fontSize: "13px",
-            zIndex: 10
+            position:"absolute",
+            right:"6px",
+            top:"28px",
+            background: t.colors.sidebar,
+            border: `1px solid ${t.colors.border}`,
+            borderRadius:"4px",
+            padding:"6px",
+            display:"flex",
+            flexDirection:"column",
+            gap:"4px",
+            zIndex:100,
+            fontFamily: t.fonts.ui
           }}
         >
-          {node.type === "folder" && (
+
+          {node.type==="folder" && (
             <>
-              <div
-                style={menuItem}
-                onClick={() => onCreate(node.id, "file")}
-              >
-                New File
+              <div style={menuItem(t)} onClick={()=>setCreating("file")}>
+                + file
               </div>
 
-              <div
-                style={menuItem}
-                onClick={() => onCreate(node.id, "folder")}
-              >
-                New Folder
+              <div style={menuItem(t)} onClick={()=>setCreating("folder")}>
+                + folder
               </div>
             </>
           )}
 
           <div
-            style={menuItem}
-            onClick={() => setEditing(true)}
+            style={menuItem(t)}
+            onClick={()=>onRename(node.id,prompt("Rename:",node.name))}
           >
-            Rename
+            rename
           </div>
 
           <div
-            style={menuItem}
-            onClick={() => onDelete(node.id)}
+            style={{...menuItem(t),color:"#ff6666"}}
+            onClick={()=>onDelete(node.id)}
           >
-            Delete
+            delete
           </div>
+
         </div>
+
       )}
 
-      {open &&
-        node.children?.map((child) => (
-          <TreeNode
-            key={child.id}
-            node={child}
-            level={level + 1}
-            onCreate={onCreate}
-            onRename={onRename}
-            onDelete={onDelete}
-            onSelect={onSelect}
+
+
+      {/* INLINE CREATION */}
+
+      {creating && (
+
+        <div style={{paddingLeft:"20px"}}>
+
+          <input
+            autoFocus
+            value={name}
+            onChange={(e)=>setName(e.target.value)}
+            placeholder={`New ${creating}`}
+            style={inputStyle(t)}
+            onKeyDown={(e)=>{
+
+              if(e.key==="Enter") submitCreate();
+              if(e.key==="Escape") setCreating(null);
+
+            }}
+            onBlur={submitCreate}
           />
-        ))}
+
+        </div>
+
+      )}
+
+
+
+      {/* CHILDREN */}
+
+      {node.type==="folder" && expanded && node.children && (
+
+        <div style={{paddingLeft:"16px"}}>
+
+          {node.children.map(child => (
+
+            <TreeNode
+              key={child.id}
+              node={child}
+              activeNode={activeNode}
+              onSelect={onSelect}
+              onCreate={onCreate}
+              onRename={onRename}
+              onDelete={onDelete}
+              theme={theme}
+            />
+
+          ))}
+
+        </div>
+
+      )}
+
     </div>
+
   );
+
 }
 
-const menuItem = {
-  padding: "4px 10px",
-  cursor: "pointer",
-  whiteSpace: "nowrap"
-};
+
+
+function menuItem(t){
+
+  return {
+    cursor:"pointer",
+    padding:"4px 8px",
+    color: t.colors.text,
+    fontSize:"13px"
+  };
+
+}
+
+
+function inputStyle(t){
+
+  return {
+    width:"160px",
+    background: t.colors.background,
+    color: t.colors.text,
+    border: `1px solid ${t.colors.border}`,
+    padding:"3px 6px",
+    fontFamily: t.fonts.ui
+  };
+
+}

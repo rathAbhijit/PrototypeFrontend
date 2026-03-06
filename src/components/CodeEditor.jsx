@@ -1,119 +1,93 @@
-import * as Y from "yjs";
-import { WebsocketProvider } from "y-websocket";
 import { MonacoBinding } from "y-monaco";
 import Editor from "@monaco-editor/react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useEffect } from "react";
+import { themes } from "../styles/theme";
 
-export default function CodeEditor({ roomId }) {
-  const editorRef = useRef(null);
-  const ydocRef = useRef(null);
-  const providerRef = useRef(null);
+export default function CodeEditor({ provider, ydoc, nodeId, theme }) {
+
   const bindingRef = useRef(null);
-  const saveIntervalRef = useRef(null);
+  const modelRef = useRef(null);
+  const editorRef = useRef(null);
 
-  const [ready, setReady] = useState(false);
+  const t = themes[theme];
 
-  // roomId format = roomId-nodeId
-  const parts = roomId.split("-");
-  const room = parts[0];
-  const nodeId = parts[1];
+  const handleMount = (editor, monaco) => {
 
-  const API_BASE =
-    window.location.hostname === "localhost"
-      ? "http://127.0.0.1:8000"
-      : "https://prototype-e9pu.onrender.com";
+    editorRef.current = editor;
 
-  useEffect(() => {
-    if (!ready || !editorRef.current) return;
+    const awareness = provider.awareness;
+    const yText = ydoc.getText(`file-${nodeId}`);
 
-    // cleanup previous session
-    if (bindingRef.current) bindingRef.current.destroy();
-    if (providerRef.current) providerRef.current.destroy();
-    if (ydocRef.current) ydocRef.current.destroy();
-    if (saveIntervalRef.current) clearInterval(saveIntervalRef.current);
+    const model = monaco.editor.createModel("", "python");
+    modelRef.current = model;
 
-    const ydoc = new Y.Doc();
-    ydocRef.current = ydoc;
+    editor.setModel(model);
 
-    const provider = new WebsocketProvider(
-      "ws://localhost:1234",
-      roomId,
-      ydoc
-    );
-
-    providerRef.current = provider;
-
-    provider.on("status", (event) => {
-      console.log("Yjs status:", event.status);
-    });
-
-    const yText = ydoc.getText("monaco");
-    const model = editorRef.current.getModel();
+    const editors = new Set();
+    editors.add(editor);
 
     const binding = new MonacoBinding(
       yText,
       model,
-      new Set([editorRef.current]),
-      provider.awareness
+      editors,
+      awareness
     );
 
     bindingRef.current = binding;
 
-    // load initial content
-    fetch(`${API_BASE}/api/rooms/content/${nodeId}/`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.content && yText.toString().length === 0) {
-          yText.insert(0, data.content);
-        }
-      });
+  };
 
-    // autosave every 2s
-    saveIntervalRef.current = setInterval(() => {
-      const content = yText.toString();
 
-      fetch(`${API_BASE}/api/rooms/save/${nodeId}/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          content
-        })
-      });
-    }, 2000);
+  useEffect(() => {
 
     return () => {
-      clearInterval(saveIntervalRef.current);
 
-      const finalContent = yText.toString();
+      if (bindingRef.current) {
+        bindingRef.current.destroy();
+        bindingRef.current = null;
+      }
 
-      fetch(`${API_BASE}/api/rooms/save/${nodeId}/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          content: finalContent
-        })
-      });
+      if (modelRef.current) {
+        modelRef.current.dispose();
+        modelRef.current = null;
+      }
 
-      binding.destroy();
-      provider.destroy();
-      ydoc.destroy();
     };
 
-  }, [roomId, ready]);
+  }, [nodeId]);
+
 
   return (
     <Editor
       height="100%"
       defaultLanguage="python"
-      theme="vs-dark"
-      defaultValue=""
-      onMount={(editor) => {
-        editorRef.current = editor;
-        setReady(true);
+      theme={theme === "dark" ? "vs-dark" : "vs"}
+      onMount={handleMount}
+
+      options={{
+
+        fontSize: 14,
+        fontFamily: t.fonts.editor,
+
+        minimap: { enabled: false },
+
+        automaticLayout: true,
+        scrollBeyondLastLine: false,
+
+        padding: {
+          top: 10,
+          bottom: 10
+        },
+
+        smoothScrolling: true,
+        cursorBlinking: "smooth",
+        cursorSmoothCaretAnimation: true,
+
+        renderWhitespace: "none",
+        renderLineHighlight: "line",
+
+        tabSize: 2
+
       }}
     />
   );

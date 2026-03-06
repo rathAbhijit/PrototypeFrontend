@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
+import * as Y from "yjs";
+import { WebsocketProvider } from "y-websocket";
+
 import CodeEditor from "../components/CodeEditor";
 import FileSidebar from "../components/FileSidebar";
+import Header from "../components/Header";
+import { themes } from "../styles/theme";
 
 export default function EditorRoom() {
 
@@ -9,17 +14,31 @@ export default function EditorRoom() {
 
   const [tree, setTree] = useState([]);
   const [activeNode, setActiveNode] = useState(null);
+  const [openTabs, setOpenTabs] = useState([]);
+
+  const [provider, setProvider] = useState(null);
+  const [ydoc, setYdoc] = useState(null);
+
+  const [users, setUsers] = useState([]);
 
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [sidebarVisible, setSidebarVisible] = useState(true);
 
+  const [theme, setTheme] = useState("dark");
+
   const resizing = useRef(false);
+
+  const t = themes[theme];
 
   const API_BASE =
     window.location.hostname === "localhost"
       ? "http://127.0.0.1:8000"
       : "https://prototype-e9pu.onrender.com";
 
+
+  // ===============================
+  // LOAD TREE
+  // ===============================
 
   const loadTree = async () => {
 
@@ -30,9 +49,7 @@ export default function EditorRoom() {
 
       await fetch(`${API_BASE}/api/rooms/${roomId}/create-node/`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "main.py",
           type: "file",
@@ -45,6 +62,7 @@ export default function EditorRoom() {
 
       setTree(newTree);
       setActiveNode(newTree[0]);
+      setOpenTabs([newTree[0]]);
 
     } else {
 
@@ -52,54 +70,83 @@ export default function EditorRoom() {
 
       if (!activeNode && data.length > 0) {
         setActiveNode(data[0]);
+        setOpenTabs([data[0]]);
       }
 
     }
 
   };
 
-
   useEffect(() => {
     loadTree();
   }, []);
 
 
-  const createNode = async (parent, type) => {
+  // ===============================
+  // YJS CONNECTION
+  // ===============================
 
-    const name = prompt(`Enter ${type} name`);
+  useEffect(() => {
+
+    const doc = new Y.Doc();
+
+    const wsProvider = new WebsocketProvider(
+      "ws://localhost:1234",
+      roomId,
+      doc
+    );
+
+    wsProvider.on("status", (event) => {
+      console.log("Room connection:", event.status);
+    });
+
+    wsProvider.awareness.on("change", () => {
+      const states = Array.from(wsProvider.awareness.getStates().values());
+      setUsers(states);
+    });
+
+    setProvider(wsProvider);
+    setYdoc(doc);
+
+    return () => {
+      wsProvider.destroy();
+      doc.destroy();
+    };
+
+  }, [roomId]);
+
+
+  // ===============================
+  // FILE ACTIONS
+  // ===============================
+
+  const createNode = async (parent, type, name) => {
 
     if (!name) return;
 
     await fetch(`${API_BASE}/api/rooms/${roomId}/create-node/`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        name,
-        type,
-        parent
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, type, parent })
     });
 
     loadTree();
-  };
 
+  };
 
   const renameNode = async (nodeId, name) => {
 
+    if (!name) return;
+
     await fetch(`${API_BASE}/api/rooms/rename/${nodeId}/`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name })
     });
 
     loadTree();
 
   };
-
 
   const deleteNode = async (nodeId) => {
 
@@ -114,24 +161,55 @@ export default function EditorRoom() {
   };
 
 
+  // ===============================
+  // TAB MANAGEMENT
+  // ===============================
+
   const selectNode = (node) => {
 
     if (node.type !== "file") return;
 
     setActiveNode(node);
 
+    setOpenTabs((tabs) => {
+
+      if (tabs.find((t) => t.id === node.id)) return tabs;
+
+      return [...tabs, node];
+
+    });
+
   };
 
+
+  const closeTab = (id) => {
+
+    setOpenTabs((tabs) => {
+
+      const updated = tabs.filter((t) => t.id !== id);
+
+      if (activeNode?.id === id) {
+        setActiveNode(updated[0] || null);
+      }
+
+      return updated;
+
+    });
+
+  };
+
+
+  // ===============================
+  // SIDEBAR RESIZE
+  // ===============================
 
   const startResize = () => {
     resizing.current = true;
   };
 
-
   const stopResize = () => {
     resizing.current = false;
   };
-
 
   const resize = (e) => {
 
@@ -140,7 +218,6 @@ export default function EditorRoom() {
     setSidebarWidth(Math.max(180, e.clientX));
 
   };
-
 
   useEffect(() => {
 
@@ -155,97 +232,118 @@ export default function EditorRoom() {
   }, []);
 
 
+  // ===============================
+  // UI
+  // ===============================
+
   return (
 
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
-        background: "#181818",
-        color: "#eee"
-      }}
-    >
+    <div style={{
+      display:"flex",
+      flexDirection:"column",
+      height:"100vh",
+      background: t.colors.background,
+      color: t.colors.text,
+      fontFamily: t.fonts.ui
+    }}>
 
-      {/* HEADER */}
-      <div
-        style={{
-          height: "42px",
-          background: "#202020",
-          borderBottom: "1px solid #2b2b2b",
-          display: "flex",
-          alignItems: "center",
-          padding: "0 12px",
-          gap: "10px"
-        }}
-      >
+      <Header
+        roomId={roomId}
+        users={users}
+        theme={theme}
+        toggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
+        toggleSidebar={() => setSidebarVisible(!sidebarVisible)}
+      />
 
-        <button
-          onClick={() => setSidebarVisible(!sidebarVisible)}
-          style={headerBtn}
-        >
-          ☰
-        </button>
+      <div style={{ display:"flex", flex:1 }}>
 
-        <span style={{ fontWeight: "bold" }}>
-          Collaborative Editor
-        </span>
-
-        <span style={{ opacity: 0.6 }}>
-          Room: {roomId}
-        </span>
-
-      </div>
-
-
-      {/* WORKSPACE */}
-      <div
-        style={{
-          display: "flex",
-          flex: 1,
-          overflow: "hidden"
-        }}
-      >
-
-        {/* SIDEBAR */}
         {sidebarVisible && (
-          <div
-            style={{
-              width: sidebarWidth,
-              display: "flex"
-            }}
-          >
+          <div style={{ width:sidebarWidth, display:"flex" }}>
 
             <FileSidebar
               tree={tree}
+              activeNode={activeNode}
+              onSelect={selectNode}
               onCreate={createNode}
               onRename={renameNode}
               onDelete={deleteNode}
-              onSelect={selectNode}
+              theme={theme}
             />
 
-            {/* RESIZER */}
             <div
               onMouseDown={startResize}
               style={{
-                width: "4px",
-                cursor: "col-resize",
-                background: "#222"
+                width:"4px",
+                cursor:"col-resize",
+                background: t.colors.border
               }}
             />
 
           </div>
         )}
 
+        <div style={{ flex:1, display:"flex", flexDirection:"column" }}>
 
-        {/* EDITOR */}
-        <div style={{ flex: 1 }}>
+          {/* FILE TABS */}
 
-          {activeNode && (
-            <CodeEditor
-              roomId={`${roomId}-${activeNode.id}`}
-            />
-          )}
+          <div style={{
+            display:"flex",
+            background: t.colors.tabs,
+            borderBottom:`1px solid ${t.colors.border}`
+          }}>
+
+            {openTabs.map(tab => (
+
+              <div
+                key={tab.id}
+                onClick={() => setActiveNode(tab)}
+                style={{
+                  padding:"6px 14px",
+                  cursor:"pointer",
+                  background:
+                    activeNode?.id === tab.id
+                      ? t.colors.activeTab
+                      : "transparent",
+                  borderRight:`1px solid ${t.colors.border}`,
+                  display:"flex",
+                  gap:"8px",
+                  alignItems:"center",
+                  fontSize:"13px"
+                }}
+              >
+
+                {tab.name}
+
+                <span
+                  onClick={(e)=>{
+                    e.stopPropagation();
+                    closeTab(tab.id);
+                  }}
+                  style={{opacity:0.6}}
+                >
+                  ×
+                </span>
+
+              </div>
+
+            ))}
+
+          </div>
+
+
+          <div style={{ flex:1 }}>
+
+            {provider && ydoc && activeNode && (
+              <CodeEditor
+                key={activeNode.id}
+                provider={provider}
+                ydoc={ydoc}
+                nodeId={activeNode.id}
+                theme={theme}
+              />
+            )}
+
+          </div>
 
         </div>
 
@@ -256,13 +354,3 @@ export default function EditorRoom() {
   );
 
 }
-
-
-const headerBtn = {
-  background: "#2a2a2a",
-  border: "1px solid #333",
-  color: "white",
-  padding: "4px 8px",
-  cursor: "pointer",
-  borderRadius: "4px"
-};

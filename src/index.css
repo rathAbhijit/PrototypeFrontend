@@ -1,5 +1,13 @@
 body {
   margin: 0;
-  background-color: #181818;
-  font-family: 'Inter', system-ui, sans-serif;
+  padding: 0;
+  background: #0f0f0f;
+  color: #e6e6e6;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
 }
+
+#root {
+  height: 100%;
+}
+
